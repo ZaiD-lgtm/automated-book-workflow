@@ -103,5 +103,12 @@
     "timestamp": "20250719_231940",
     "screenshot": "web_scraping/screenshots\\The_Gates_of_Morning-Book_1-Chapter_3_-_Wikisource_20250719_231940.png",
     "text_length": 7813
+  },
+  {
+    "url": "https://en.wikisource.org/wiki/The_Gates_of_Morning/Book_1/Chapter_5",
+    "title": "The Gates of Morning/Book 1/Chapter 5 - Wikisource, the free online library",
+    "timestamp": "20250719_235930",
+    "screenshot": "web_scraping/screenshots\\The_Gates_of_Morning-Book_1-Chapter_5_-_Wikisource_20250719_235930.png",
+    "text_length": 15521
   }
 ]
