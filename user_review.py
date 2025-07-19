@@ -85,7 +85,7 @@ def handle_regeneration(feedback_type="llm"):
         new_AI_rewritten = new_AI_rewritten_list[0]
 
     new_review_score = int(parse_reviewer_scores(new_AI_review)["Total Score"])
-    new_result = reward_function(st.session_state.original_text, new_AI_rewritten, title)
+    new_result = reward_function(st.session_state.original_text, new_AI_rewritten)
     new_rl_reward = new_result["reward"]
 
     st.session_state.temp_new_AI_rewritten = new_AI_rewritten
@@ -106,6 +106,38 @@ def gen_response_review(title, content, additional_prompt=""):
         return mistral_response, ""
 
     return mistral_response, gemini_review
+def store_review(
+    collection,
+    chapter_id: str,
+    final_text: str,
+    original_text: str,
+    action: str,
+    review_score: float,
+    rl_reward: float,
+    total_reward: float,
+    comments: str = "",
+    reviewer: str = "unknown"
+):
+    unique_id = f"{chapter_id}_{int(datetime.now().timestamp())}"  # ensures uniqueness
+
+    metadata = {
+        "chapter_id": chapter_id,
+        "action": action,
+        "review_score": review_score,
+        "rl_reward": rl_reward,
+        "total_reward": total_reward,
+        "comments": comments,
+        "reviewer": reviewer,
+        "timestamp": datetime.now().isoformat()
+    }
+
+    collection.add(
+        documents=[final_text],
+        metadatas=[metadata],
+        ids=[unique_id]
+    )
+
+    print(f"stored review with id: {unique_id}")
 
 
 def main():
@@ -129,23 +161,31 @@ def main():
 
     st.markdown("---")
 
-    action_options = ["Accept", "Edit", "Regenerate Better Response (LLM Feedback)", "Feedback (Human Input)", "Reject"]
-    selected_action = st.radio("Choose Action", action_options, key="main_action_radio")
+    # Use internal values for clarity
+    action_map = {
+        "✅ Accept": "accept",
+        "✏️ Edit": "edit",
+        "🔁 Regenerate using LLM Feedback": "regenerate_llm",
+        "🧠 Regenerate using Human Feedback": "regenerate_human",
+        "❌ Reject": "reject",
+    }
 
-    if selected_action == "Edit":
-        st.session_state.edited_text_display = st.text_area("Edit the Text", st.session_state.AI_rewritten, height=300, key="edit_text_area")
+    selected_label = st.radio("Choose Action", list(action_map.keys()), key="main_action_radio")
+    selected_action = action_map[selected_label]
+
+    if selected_action == "edit":
+        st.session_state.edited_text_display = st.text_area("Edit the Text", st.session_state.AI_rewritten, height=300,
+                                                            key="edit_text_area")
         st.session_state.current_action = "Edit"
         st.session_state.comments = "Human edited."
 
-    elif selected_action == "Regenerate Better Response (based on llm feedback)":
+    elif selected_action == "regenerate_llm":
         st.session_state.current_action = "Regenerate Better Response"
         if st.button("Generate based on LLM Feedback", key="generate_llm_btn"):
             handle_regeneration(feedback_type="llm")
 
-    elif selected_action == "Regenerate (Human Feedback)":
-
+    elif selected_action == "regenerate_human":
         st.session_state.current_action = "Feedback"
-
         st.session_state.comments = st.text_area("Enter your feedback for regeneration:", st.session_state.comments,
                                                  key="human_feedback_text_area")
 
@@ -155,13 +195,12 @@ def main():
             else:
                 st.warning("Please provide feedback to regenerate the response.")
 
-
-    elif selected_action == "Accept":
+    elif selected_action == "accept":
         st.session_state.current_action = "Accept"
         st.session_state.edited_text_display = st.session_state.AI_rewritten
         st.session_state.comments = "Accepted as is."
 
-    elif selected_action == "Reject":
+    elif selected_action == "reject":
         st.session_state.current_action = "Reject"
         st.session_state.edited_text_display = ""
         st.session_state.comments = "Rejected."
@@ -179,7 +218,7 @@ def main():
         with col1:
             if st.button("Accept New Response", key="accept_new_response"):
                 st.session_state.AI_rewritten = st.session_state.temp_new_AI_rewritten
-                st.session_state.AI_review = reviewer(st.session_state.original_text, st.session_state.AI_rewritten)
+                st.session_state.AI_review = reviewer(st.session_state.original_text, st.session_state.AI_rewritten, st.session_state.chapter_title)
                 st.session_state.review_score = st.session_state.temp_new_review_score
                 st.session_state.rl_reward = st.session_state.temp_new_rl_reward
                 st.session_state.edited_text_display = st.session_state.temp_new_AI_rewritten
@@ -187,12 +226,12 @@ def main():
                 st.session_state.current_action = "Accepted Regenerated"
                 st.session_state.comments = "Regenerated content accepted."
                 st.session_state.show_regenerated_option = False
-                st.experimental_rerun()
+                st.rerun()
         with col2:
             if st.button("Discard New Response", key="discard_new_response"):
                 st.session_state.show_regenerated_option = False
                 st.session_state.comments = "Regenerated content discarded."
-                st.experimental_rerun()
+                st.rerun()
 
     st.markdown("---")
 
@@ -224,6 +263,12 @@ def main():
         with open(json_dir, "w", encoding="utf-8") as file:
             json.dump(logs, file, indent=2)
         st.success(f"Decision saved to {json_dir}")
+
+    client = chromadb.PersistentClient(path="chromadb/db")
+    embed_fn = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+    collection = client.get_or_create_collection("automated_book_workflow", embedding_function=embed_fn)
+    store_review(collection, st.session_state.chapter_title, st.session_state.edited_text_display, st.session_state.original_text, st.session_state.current_action, st.session_state.review_score, st.session_state.rl_reward, st.session_state.total_reward, st.session_state.comments)
+
 
 
 if __name__ == "__main__":
