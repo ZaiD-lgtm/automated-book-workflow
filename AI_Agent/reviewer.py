@@ -6,7 +6,7 @@ import os
 import requests
 import json
 from dotenv import load_dotenv
-from web_scraping.scraper import fetch_chapter # Assuming this is correctly imported and functions
+from web_scraping.scraper import fetch_chapter
 
 load_dotenv()
 # mistral_api = os.getenv("mistral")
